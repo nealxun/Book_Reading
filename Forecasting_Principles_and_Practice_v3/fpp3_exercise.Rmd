@@ -1,0 +1,444 @@
+---
+title: "fpp3_exercise"
+author: "Neal Yu"
+date: "3/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load_packages, echo=FALSE, message=FALSE, warning=FALSE}
+library(fpp3)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+```
+
+# Chapter 2
+
+1. Use the help function to explore what the series gafa_stock, PBS, vic_elec and pelt represent.
+
+```{r Question 2-1, echo=FALSE, message=FALSE, warning=FALSE}
+PBS %>%
+        filter(ATC2=="A10") %>%
+        select(Month, Concession, Type, Cost) %>%
+        summarise(TotalC = sum(Cost)) %>%
+        mutate(Cost = TotalC/1e6) -> a10
+# a. Use autoplot() to plot some of the series in these data sets.
+autoplot(gafa_stock)
+autoplot(a10)
+autoplot(vic_elec)
+autoplot(pelt)
+
+# b. What is the time interval of each series?
+interval(gafa_stock)
+interval(a10)
+interval(vic_elec)
+interval(pelt)
+
+# c. Use filter() to find what days corresponded to the peak closing price for each of the four stocks in gafa_stock.
+gafa_stock %>%
+        group_by(Symbol) %>%
+        filter(Close == max(Close))
+
+```
+
+# Chapter 3
+
+1. Consider the GDP information in global_economy. Plot the GDP per capita for each country over time. Which country has the highest GDP per capita? How has this changed over time?
+
+```{r Question 3-1, echo=FALSE, message=FALSE, warning=FALSE}
+df_top <- global_economy %>%
+        as_tibble() %>%
+        mutate(GDP_per_capital = GDP / Population) %>%
+        group_by(Country) %>%
+        summarise(GDP_per_capital_avg = mean(GDP_per_capital, na.rm = TRUE)) %>%
+        ungroup() %>%
+        arrange(desc(GDP_per_capital_avg))
+head(df_top, 10)
+
+COUNTRY <- unique(df_top$Country)[1:10]  
+df <- global_economy %>%
+        filter(Country %in% COUNTRY) %>%
+        mutate(GDP_per_capital = GDP / Population)
+ggplot(df, aes(x = Year, y = GDP_per_capital)) +
+        geom_line(aes(color = Country))
+
+```
+
+
+
+
+# Chapter 5
+
+1. Use the help function to explore what the series gafa_stock, PBS, vic_elec and pelt represent.
+Produce forecasts for the following series using whichever of NAIVE(y), SNAIVE(y) or RW(y ~ drift()) is more appropriate in each case:
+
+* Australian Population (global_economy)
+* Bricks (aus_production)
+* NSW Lambs (aus_livestock)
+* Household wealth (hh_budget).
+* Australian takeaway food turnover (aus_retail).
+
+* gafa_stock: historical stock price from 2014-2018 for Google, Amazon, Facebook, and Apple.
+* PBS: monthly medicare Australia prescription data.
+* vic_elec: half-hourly electricty demand for Victoria, Australia.
+* pelt: Hudson Bay company trading records for Snwshoe Hare (a rabbit) and Canadian Lynx (a fox) furs from 1845 to 1935.
+
+```{r Question 5-1, echo=FALSE, message=FALSE, warning=FALSE}
+# ?gafa_stock
+# ?PBS
+# ?vic_elec
+# ?pelt
+
+# Australia population
+Australia_pop <- global_economy %>%
+        filter(Country == "Australia") %>%
+        select(Country, Year, Population)
+autoplot(Australia_pop)
+fit <- Australia_pop %>% model(RW(Population ~ drift()))
+fit %>% gg_tsresiduals()
+fit %>% forecast(h = 20) %>% 
+        autoplot() + 
+        geom_line(aes(x = Year, y = Population, color = "actual"), data = Australia_pop) +
+        geom_line(aes(x = Year, y = .fitted, color = "fitted"), data = augment(fit)) +
+        labs(title = "Australina Population Forecast")
+                
+# Australia bricks quarterly production
+aus_brick <- aus_production %>% 
+        select(Quarter, Bricks) %>%
+        filter(!is.na(Bricks))
+autoplot(aus_brick)
+fit <- aus_brick %>% model(SNAIVE(Bricks ~ lag("year")))
+fit %>% gg_tsresiduals()
+fit %>% forecast(h = 16) %>% 
+        autoplot() + 
+        geom_line(aes(x = Quarter, y = Bricks, color = "actual"), size = 1.05, data = aus_brick) +
+        geom_line(aes(x = Quarter, y = .fitted, color = "fitted"), data = augment(fit)) +
+        labs(title = "Australina Bricks Production")
+
+
+
+```
+# Chapter 7
+
+1. Half-hourly electricity demand for Victoria, Australia is contained in vic_elec. Extract the January 2014 electricity demand, and aggregate this data to daily with daily total demands and maximum temperatures.
+
+a. Plot the data and find the regression model for Demand with temperature as an explanatory variable. Why is there a positive relationship?
+
+* With the temperature rising, more and more people are using air condition for cooling, which result in high electricity demand.
+
+```{r Question 7-1a, echo=FALSE, message=FALSE, warning=FALSE}
+jan14_vic_elec <- vic_elec %>%
+        filter(yearmonth(Time) == yearmonth("2014 Jan")) %>%
+        index_by(Date = as_date(Time)) %>%
+        summarise(Demand = sum(Demand), Temperature = max(Temperature))
+
+p1 <- ggplot(jan14_vic_elec, aes(x = Date, y = Temperature)) + 
+        geom_line(color = "red")
+p2 <- ggplot(jan14_vic_elec, aes(x = Date, y = Demand)) + 
+        geom_line(color = "blue")
+p1 / p2
+
+ggplot(jan14_vic_elec, aes(x = Temperature, y = Demand)) +
+        geom_point(alpha = 0.5) +
+        geom_smooth(method = "lm", se = FALSE) +
+        labs(title = "Relationship between temperature and demand", subtitle = "Victoria Australia Jan 2014")
+
+```
+
+b. Produce a residual plot. Is the model adequate? Are there any outliers or influential observations?
+
+* The model seems OK though the residuals are left skewed.
+* There are few influential observations, which are days with temperature more than 40 degree.
+
+```{r Question 7-1b, echo=FALSE, message=FALSE, warning=FALSE}
+fit <- jan14_vic_elec %>% 
+        model(TSLM(Demand ~ Temperature))
+report(fit)
+
+# residual plot
+fit %>% gg_tsresiduals()
+
+```
+
+c. Use the model to forecast the electricity demand that you would expect for the next day if the maximum temperature was 15∘ and compare it with the forecast if the with maximum temperature was 35∘. Do you believe these forecasts? The following R code will get you started:
+
+15 degree seems not accurate since it's out of range of tranining data. 35 degree looks more reasonable.
+
+```{r Question 7-1c, echo=FALSE, message=FALSE, warning=FALSE}
+jan14_vic_elec %>%
+        model(TSLM(Demand ~ Temperature)) %>%
+        forecast(
+                new_data(jan14_vic_elec, 2) %>% mutate(Temperature = c(15, 35))
+        ) %>%
+        autoplot(jan14_vic_elec) +
+        labs(title = "First point of forecast is 15 degree while second one is 35 degree")
+
+```
+
+d. Give prediction intervals for your forecasts
+
+```{r Question 7-1d, echo=FALSE, message=FALSE, warning=FALSE}
+fcst <- jan14_vic_elec %>%
+        model(TSLM(Demand ~ Temperature)) %>%
+        forecast(
+                new_data(jan14_vic_elec, 2) %>% mutate(Temperature = c(15, 35))
+        ) %>%
+        # compute confidence intervals
+        hilo()
+
+# 15 degree
+print("15 degree")
+fcst$`80%`[1]
+fcst$`95%`[1]
+
+# 35 degree
+print("35 degree")
+fcst$`80%`[2]
+fcst$`95%`[2]
+
+```
+
+e. Plot Demand vs Temperature for all of the available data in vic_elec aggregated to daily total demand and maximum temperature. What does this say about your model?
+
+Clearly there is a non-linear relationship between temperature and demand. Demand tends to be high during either low or high temperature.
+
+```{r Question 7-1e, echo=FALSE, message=FALSE, warning=FALSE}
+vic_elec_daily <- vic_elec %>%
+        index_by(Date = as_date(Time)) %>%
+        summarise(Demand = sum(Demand), Temperature = max(Temperature))
+
+p1 <- ggplot(vic_elec_daily, aes(x = Date, y = Temperature)) + 
+        geom_line(color = "red")
+p2 <- ggplot(vic_elec_daily, aes(x = Date, y = Demand)) + 
+        geom_line(color = "blue")
+p1 / p2
+
+ggplot(vic_elec_daily, aes(x = Temperature, y = Demand)) +
+        geom_point(alpha = 0.5) +
+        geom_smooth(method = "lm", se = FALSE) +
+        labs(title = "Relationship between temperature and demand", subtitle = "Victoria Australia Jan 2014")
+
+fit <- vic_elec_daily %>% 
+        model(TSLM(Demand ~ Temperature))
+report(fit)
+
+# residual plot
+fit %>% gg_tsresiduals()
+
+# fit a quadratic model
+ggplot(vic_elec_daily, aes(x = Temperature, y = Demand)) +
+        geom_point(alpha = 0.5) +
+        geom_smooth(method = "loess", se = FALSE) +
+        labs(title = "Relationship between temperature and demand")
+fit2 <- vic_elec_daily %>% 
+        mutate(Temperature_square = Temperature ^2) %>% 
+        model(TSLM(Demand ~ Temperature + Temperature_square))
+report(fit2)
+fit2 %>% gg_tsresiduals()
+
+```
+
+
+
+
+
+
+# Chapter 8
+1. Consider the the number of pigs slaughtered in Victoria, available in the aus_livestock dataset.
+
+a. Use the ETS() function in R to estimate the equivalent model for simple exponential smoothing. Find the optimal values of α and ℓ0, and generate forecasts for the next four months.
+
+* alpha is 0.32
+* l0 is 100646.6
+* Next four months are 95187
+
+```{r Question 8-1a, echo=FALSE, message=FALSE, warning=FALSE}
+pigs <- aus_livestock %>%
+        filter(Animal == "Pigs", State == "Victoria")
+
+g <- ggplot(pigs, aes(x = Month, y = Count)) + 
+        geom_line(color = "black") +
+        labs(title = "Monthly Pigs Slaughtered in Victoria")
+print(g)
+
+# simple exponential smoothing model
+fit <- pigs %>%
+        model(ETS(Count ~ error("A") + trend("N") + season("N"), opt_crit = "mse"))
+report(fit) # see model parameters
+
+# generate forecast
+fc <- fit %>%
+        forecast(h = 4)
+fc %>%
+        autoplot(pigs) +
+        geom_line(aes(y = .fitted, colour = "Fitted"), data = augment(fit)) +
+        ylab("Pigs Slaughted in Victoria") + xlab("Month")
+
+```
+
+b. Compute a 95% prediction interval for the first forecast using ^y±1.96s where s is the standard deviation of the residuals. Compare your interval with the interval produced by R.
+
+* The results looks slightly different.
+
+```{r Question 8-1b, echo=FALSE, message=FALSE, warning=FALSE}
+# confidence calculated by R
+print("Interval produced by R")
+interval_r <- fc %>% hilo() %>% pull("95%")
+interval_r[1]
+
+# calculated confidence interval
+ls_residual <- fit %>% augment() %>% pull(".resid")
+var_residual <- sd(ls_residual)
+yhat <- fc$.mean[1]
+print("Calculated confidence interval")
+print(paste0("95% lower: ", yhat - 1.96 * var_residual))
+print(paste0("95% upper: ", yhat + 1.96 * var_residual))
+
+
+```
+
+
+# Chapter 9
+1. Figure 9.33 shows the ACFs for 36 random numbers, 360 random numbers and 1,000 random numbers.
+
+```{r Question 9-1, echo=FALSE}
+set.seed(30)
+y <- tsibble(sample = 1:36, wn = rnorm(36), index = sample)
+y %>% autoplot(wn) + ggtitle("White noise")
+y %>% ACF(wn) %>% autoplot() + labs(title = "36 Random Numbers") + ylim(-1.0, 1.0)
+
+y <- tsibble(sample = 1:360, wn = rnorm(360), index = sample)
+y %>% autoplot(wn) + ggtitle("White noise")
+y %>% ACF(wn) %>% autoplot() + labs(title = "360 Random Numbers") + ylim(-1.0, 1.0)
+
+y <- tsibble(sample = 1:1000, wn = rnorm(1000), index = sample)
+y %>% autoplot(wn) + ggtitle("White noise")
+y %>% ACF(wn) %>% autoplot() + labs(title = "1000 Random Numbers") + ylim(-1.0, 1.0)
+
+```
+
+a. Explain the differences among these figures. Do they all indicate that the data are white noise?
+
+* All three figures indicate that the data are white noise, since the ACF bars are all within the dash lines which indicate critical values for the ACF to be considered statistically significance. For data with smaller number of samples, the ACF bars are taller than the data with larger number of samples. Since the data are randomly generated, they are independently and identically distributed, and therefore should have autocorrelation of zero for all of its lags. This is demonstrated by the figures - as more samples are generated, the autocorrelations tend toward zero.
+
+b. Why are the critical values at different distances from the mean of zero? Why are the autocorrelations different in each figure when they each refer to white noise?
+
+* These dash lines are estimated using ±1.96/sqrt(N) with zero center. Mathematically, as N gets bigger, the absolute value of critical value become smaller. Statistically, this means that it is “easier” for smaller data set to exhibit correlation by chance than larger data set. So to compensate, the absolute value of critical values are larger for smaller data set - you need to have higher autocorrelation to reject the null hypothesis that the autocorrelation is zero (i.e. the autocorrelation observed are due to chance only).
+
+
+
+# Chapter 10
+1. Consider monthly sales and advertising data for an automotive parts company (data set fma::advert).
+
+1-a. Visualise the data with a variety of plots. Why are facets useful in visualising this data?
+
+```{r question 10-1a}
+
+auto_advert <- fma::advert %>% 
+        as_tsibble(pivot_longer = FALSE) 
+        #mutate(index = yearmonth("2010 Jan") + 0:23)
+
+auto_advert %>%
+        gather("key", "value", sales, advert) %>%
+        ggplot(aes(x = index, y = value)) +
+        geom_line() +
+        facet_grid(vars(key), scales = "free_y") +
+        labs(x = "Month", y = NULL,
+             title = "Automotive parts company sales and advertising")
+
+```
+
+1-b. Fit a standard regression model yt=a+bxt+ηt where yt denotes sales and xt denotes advertising using the TSLM() function.
+
+```{r question 10-1b}
+
+fit_lm <- auto_advert %>% 
+        model(TSLM(sales ~ advert))
+report(fit_lm)
+
+
+```
+
+1-c. Show that the residuals have significant autocorrelation.
+
+```{r question 10-1c}
+
+# check residuals
+gg_tsresiduals(fit_lm)
+
+```
+
+* From the ACF plot, it is observed that the residuals are highly correlated in lag 1 and 2. The histogram also indicates a long left tail.
+
+1-d. What difference does it make if you use the ARIMA function instead
+
+```{r question 10-1d}
+
+fit_arima <- auto_advert %>%
+        model(ARIMA(sales ~ advert + pdq(0,0,0)))
+report(fit_arima)
+
+```
+
+* The model looks very similar as the linear model, but the error can be treated to follow ARIMA process.
+
+1-e. Refit the model using ARIMA(). How much difference does the error model make to the estimated parameters? What ARIMA model for the errors is selected?
+
+```{r question 10-1e}
+
+fit_dr <- auto_advert %>%
+        model(ARIMA(sales ~ advert))
+report(fit_dr)
+
+```
+* By introducing the ARIMA error, the intercept increases while advert decreases. The error is ARIMA(1,0,0).
+
+
+1-f. Check the residuals of the fitted model
+
+```{r question 10-1f}
+
+gg_tsresiduals(fit_dr)
+
+bind_rows(accuracy(fit_lm), accuracy(fit_arima), accuracy(fit_dr))
+
+```
+
+* Now the residuals look more like white noise.
+
+1-g. Assuming the advertising budget for the next six months is exactly 10 units per month, produce and plot sales forecasts with prediction intervals for the next six months.
+
+```{r question 10-1g}
+
+auto_advert_future <- new_data(auto_advert, 6) %>% mutate(advert = 10)
+
+fit <- auto_advert %>% 
+        model(lm = TSLM(sales ~ advert),
+              arima = ARIMA(sales ~ advert + pdq(0,0,0)),
+              dr = ARIMA(sales ~ advert))
+glance(fit)
+accuracy(fit)
+
+# generate forecast
+fcst <- fit %>% 
+        forecast(auto_advert_future)
+
+ggplot(fcst) +
+        geom_line(aes(x = index, y = sales, color = .model)) +
+        geom_line(aes(x = index, y = sales), data = auto_advert) +
+        labs(x = "Month", title = "Sales forecast for automotive parts company in next 6 months",
+             subtitle = "ARIMA model has the same result as linear model")
+
+```
+
+
+
+
+
+
+
+
