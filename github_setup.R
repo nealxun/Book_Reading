@@ -4,6 +4,6 @@
 rm(list = ls())
 
 # create a remote on github for the existing project
-
+usethis::use_github()
 
 
