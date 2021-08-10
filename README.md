@@ -42,4 +42,9 @@ urlcolor: blue
 - Book website: [e-book](https://r-pkgs.org/index.html)
 - Notes: [notes](https://docs.google.com/document/d/18B6xsyWPz1tLlgX6FhJnXYz6HdcOOQ0yw9ydGuS3giM/edit)
 
+### R graphics cookbook
+- Reading date: 2021-08-01
+- Book website: [e-book](https://r-graphics.org/)
+- Notes: [notes](https://docs.google.com/document/d/1LTsS6PYOEsxkFS78R8udhndiVmDhnHmIs9n8SaPHpm0/edit#)
+
 

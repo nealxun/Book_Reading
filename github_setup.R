@@ -10,7 +10,6 @@ usethis::use_github()
 # https://github.com/settings/tokens
 
 # store your credential
-
-
+gitcreds::gitcreds_set()
 
 
